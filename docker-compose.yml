@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+
+  cs2:
+    # image: joedwards32/cs2
+    container_name: cs2
+    build:
+      context: .
+      dockerfile: ./images/cs2/Dockerfile
+    environment:
+      # Server configuration
+      - SRCDS_TOKEN=10B532839A136848A29155DF4142DE39                 # Game Server Token from https://steamcommunity.com/dev/managegameservers
+      - CS2_SERVERNAME=ServerName     # (Set the visible name for your private server)
+      - CS2_CHEATS=0                # (0 - disable cheats, 1 - enable cheats)
+      - CS2_PORT=27015              # (CS2 server listen port tcp_udp)
+      - CS2_SERVER_HIBERNATE=0      # (Put server in a low CPU state when there are no players. 0 - hibernation disabled, 1 - hibernation enabled)
+      - CS2_RCON_PORT=27015               # (Optional, use a simple TCP proxy to have RCON listen on an alternative port. Useful for services like AWS Fargate which do not support mixed protocol ports.)
+      - CS2_LAN=0                   # (0 - LAN mode disabled, 1 - LAN Mode enabled)
+      - CS2_RCONPW=04012024         # (RCON password)
+      - CS2_PW             # (CS2 server password)
+      - CS2_MAXPLAYERS=10           # (Max players)
+      - CS2_ADDITIONAL_ARGS         # (Optional additional arguments to pass into cs2)
+      # Game modes
+      - CS2_GAMEALIAS               # (Game type, e.g. casual, competitive, deathmatch. See https://developer.valvesoftware.com/wiki/Counter-Strike_2/Dedicated_Servers)
+      - CS2_GAMETYPE=0              # (Used if CS2_GAMEALIAS not defined. See https://developer.valvesoftware.com/wiki/Counter-Strike_2/Dedicated_Servers)
+      - CS2_GAMEMODE=1              # (Used if CS2_GAMEALIAS not defined. See https://developer.valvesoftware.com/wiki/Counter-Strike_2/Dedicated_Servers)
+      - CS2_MAPGROUP=mg_active      # (Map pool)
+      - CS2_STARTMAP=de_inferno     # (Start map)
+      # Bots
+      - CS2_BOT_DIFFICULTY          # (0 - easy, 1 - normal, 2 - hard, 3 - expert)
+      - CS2_BOT_QUOTA               # (Number of bots)
+      - CS2_BOT_QUOTA_MODE          # (fill, competitive)
+      # TV
+      - TV_AUTORECORD=0             # Automatically records all games as CSTV demos: 0=off, 1=on.
+      - TV_ENABLE=0                 # Activates CSTV on server: 0=off, 1=on.
+      - TV_PORT=27020               # Host SourceTV port
+      - TV_PW=changeme              # CSTV password for clients
+      - TV_RELAY_PW=changeme        # CSTV password for relay proxies
+      - TV_MAXRATE=0                # World snapshots to broadcast per second. Affects camera tickrate.
+      - TV_DELAY=0                  # Max CSTV spectator bandwidth rate allowed, 0 == unlimited
+    ports:
+      - "27015:27015/tcp"           # TCP
+      - "27015:27015/udp"           # UDP
+      - "27020:27020/udp"           # UDP
+    volumes:
+      - ./data/cs2:/home/steam/cs2-dedicated/:Z
+      - steamcmd_login_volume:/home/steam/Steam
+    networks:
+      back:
+      default:
+
+  db:
+    image: mysql
+    container_name: database
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+    # ports:
+    #   - '3306:3306'
+    volumes:
+      - ./data/mysql/:/var/lib/mysql:Z
+    networks:
+      back:
+      # default:
+
+  nginx:
+    image: nginx
+    container_name: nginx
+    ports:
+      - '8080:80'
+    volumes:
+      - ./data/www/:/var/www/public_html
+      - ./data/www_logs/:/var/www/logs
+      - ./configs/nginx/vhost.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      back:
+      default:
+
+  php:
+    container_name: php
+    build:
+      context: .
+      dockerfile: ./images/php/Dockerfile
+    volumes:
+      - ./data/www/:/var/www/public_html
+    networks:
+      back:
+
+  phpmyadmin:
+    image: phpmyadmin
+    container_name: pma
+    restart: always
+    depends_on:
+      - db
+    environment:
+      - PMA_HOST=database
+      - HIDE_PHP_VERSION
+    ports:
+      - '1500:80'
+    networks:
+      back:
+      default:
+
+volumes:
+  steamcmd_login_volume:
+
+networks:
+  back:
+    driver: bridge
+    internal: true
+    # ipam:
+    #  driver: default
+    #  config:
+    #    - subnet: 172.16.238.0/24
+  default:
+    driver: bridge
